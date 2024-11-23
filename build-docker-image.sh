@@ -1,2 +1,2 @@
-docker build -t scholtz2/derec-cyrpto-core-grpc .
-docker push scholtz2/derec-cyrpto-core-grpc
+docker build -t scholtz2/derec-crypto-core-grpc .
+docker push scholtz2/derec-crypto-core-grpc
