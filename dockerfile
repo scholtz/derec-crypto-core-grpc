@@ -28,10 +28,10 @@ FROM ubuntu:latest
 WORKDIR /app
 
 # Copy the compiled binary from the builder image
-COPY --from=builder /app/target/release/derec-cyrpto-core-grpc /app/
+COPY --from=builder /app/target/release/derec-crypto-core-grpc /app/
 
 # Expose the port
 EXPOSE 50051
 
 # Command to run the binary
-CMD ["./derec-cyrpto-core-grpc"]
+CMD ["./derec-crypto-core-grpc"]
