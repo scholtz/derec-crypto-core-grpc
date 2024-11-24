@@ -3,12 +3,12 @@ use tonic::{transport::Server, Request, Response, Status};
 use tokio::sync::oneshot;
 use tokio::signal;
 
-//pub mod sign;
-use base64::{engine::general_purpose, Engine as _};
+use data_encoding::BASE32;
 
 pub mod protos;
 pub mod secret_sharing;
 pub mod secure_channel;
+use sha2::{Digest, Sha256};
 
 use protos::derec_crypto::{
     EncryptDecryptRequest,
@@ -52,16 +52,15 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<SignGenerateSigningKeyRequest>,
     ) -> Result<Response<SignGenerateSigningKeyResponse>, Status> {
-        info!("sign_generate_signing_key");
+        info!("sign_generate_signing_key I");
         // Generate signing keys
         let (public_key, private_key) = secure_channel::sign::generate_signing_key();
-        let pk_b64 = general_purpose::STANDARD.encode(&public_key);
-        println!("PK: {pk_b64}");
-        let response = SignGenerateSigningKeyResponse {
+        let response: SignGenerateSigningKeyResponse = SignGenerateSigningKeyResponse {
             public_key,
             private_key,
         };
-
+        
+        info!("sign_generate_signing_key O PK: {} SK: {}",to_b32(&response.public_key),to_b32(&response.private_key));
         Ok(Response::new(response))
     }
 
@@ -70,18 +69,19 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<SignSignRequest>,
     ) -> Result<Response<SignSignResponse>, Status> {
-        info!("sign_sign");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
         // Extract message and secret_key from SignRequest
         let message = req.message;
-        let secret_key = req.secret_key;
+        let secret_key: Vec<u8> = req.secret_key;
+        info!("sign_sign I M: {} SK: {}",to_b32(&message),to_b32(&secret_key));
 
         let signature = secure_channel::sign::sign(&message, &secret_key);
         let response = SignSignResponse {
             signature: signature
         };
+        info!("sign_sign O M: {} SK: {}: S: {}",to_b32(&message),to_b32(&secret_key),to_b32(&response.signature));
         Ok(Response::new(response))
     }
 
@@ -89,19 +89,20 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<SignVerifyRequest>,
     ) -> Result<Response<SignVerifyResponse>, Status> {
-        info!("sign_verify");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
         // Extract message and secret_key from SignRequest
         let message = req.message;
         let signature = req.signature;
-        let public_key = req.public_key;
+        let public_key: Vec<u8> = req.public_key;
+        info!("sign_verify I M: {} S: {} PK: {}", to_b32(&message), to_b32(&signature), to_b32(&public_key));
 
         let signed = secure_channel::sign::verify(&message, &signature, &public_key);
         let response = SignVerifyResponse {
             valid: signed
         };
+        info!("sign_verify O M: {} S: {} PK: {}: V: {}", to_b32(&message), to_b32(&signature), to_b32(&public_key), response.valid);
         Ok(Response::new(response))
     }
 
@@ -109,16 +110,14 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<EncryptGenerateEncryptionKeyRequest>,
     ) -> Result<Response<EncryptGenerateEncryptionKeyResponse>, Status> {
-        info!("encrypt_generate_encryption_key");
+        info!("encrypt_generate_encryption_key I");
         // Generate signing keys
         let (public_key, private_key) = secure_channel::encrypt::generate_encryption_key();
-        let pk_b64: String = general_purpose::STANDARD.encode(&public_key);
-        println!("PK: {pk_b64}");
         let response = EncryptGenerateEncryptionKeyResponse {
             public_key,
             private_key,
         };
-
+        info!("encrypt_generate_encryption_key O PK: {} SK: {}",to_b32(&response.public_key),to_b32(&response.private_key));
         Ok(Response::new(response))
     }
 
@@ -126,18 +125,19 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<EncryptEncryptRequest>,
     ) -> Result<Response<EncryptEncryptResponse>, Status> {
-        info!("encrypt_encrypt");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
         // Extract message and secret_key from SignRequest
         let message = req.message;
         let public_key = req.public_key;
+        info!("encrypt_encrypt I M: {} PK: {}",to_b32(&message),to_b32(&public_key));
 
         let ciphertext = secure_channel::encrypt::encrypt(&message, &public_key);
         let response = EncryptEncryptResponse {
             ciphertext: ciphertext
         };
+        info!("encrypt_encrypt O M: {} PK: {}: CT: {}",to_b32(&message),to_b32(&public_key),to_b32(&response.ciphertext));
         Ok(Response::new(response))
     }
 
@@ -145,27 +145,26 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<EncryptDecryptRequest>,
     ) -> Result<Response<EncryptDecryptResponse>, Status> {
-        info!("encrypt_decrypt");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
         // Extract message and secret_key from SignRequest
         let ciphertext = req.ciphertext;
         let secret_key = req.secret_key;
+        info!("encrypt_decrypt I CT: {} SK: {}",to_b32(&ciphertext),to_b32(&secret_key));
 
         let message = secure_channel::encrypt::decrypt(&ciphertext, &secret_key);
         let response = EncryptDecryptResponse {
             message: message
         };
+        info!("encrypt_decrypt O CT: {} SK: {}: M: {}",to_b32(&ciphertext),to_b32(&secret_key),to_b32(&response.message));
         Ok(Response::new(response))
     }
 
-    
     async fn vss_share(
         &self,
         _request: Request<VssShareRequest>,
     ) -> Result<Response<VssShareResponse>, Status> {
-        info!("vss_share");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
@@ -173,6 +172,9 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         let n = req.n;
         let message = req.message;
         let rand = vec_to_array_unchecked(req.rand);
+        let vec = rand.to_vec();
+        info!("vss_share I T: {} N: {} M: {} R: {}",t,n,to_b32(&message),to_b32(&vec));
+        
         let access_structure: (u64, u64) = (t,n);
 
         let vss_shares = secret_sharing::vss::share(access_structure, &message, &rand);
@@ -210,7 +212,7 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<VssRecoverRequest>,
     ) -> Result<Response<VssRecoverResponse>, Status> {
-        info!("vss_recover");
+        info!("vss_recover I");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
@@ -265,7 +267,7 @@ impl DeRecCryptographyService for MyDeRecCryptographyService {
         &self,
         _request: Request<VssDetectErrorRequest>,
     ) -> Result<Response<VssDetectErrorResponse>, Status> {
-        info!("vss_detect_error");
+        info!("vss_detect_error I");
         // Generate signing keys
         let req = _request.into_inner(); // Extracts the actual message
 
@@ -357,11 +359,9 @@ fn vec_to_array_unchecked(vec: Vec<u8>) -> [u8; λ] {
     vec.try_into().unwrap() // Panics if the vector isn't exactly 16 elements
 }
 
-
-// fn vec_to_array_safe(vec: Vec<u8>) -> Option<[u8; λ]> {
-//     if vec.len() == λ {
-//         Some(vec.try_into().unwrap()) // Safe because length is checked
-//     } else {
-//         None
-//     }
-// }
+fn to_b32(vec: &Vec<u8>) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(vec);
+    let vec_hash = hasher.finalize();
+    BASE32.encode(&vec_hash).trim_end_matches('=').to_string()
+}

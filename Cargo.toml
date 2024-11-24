@@ -36,7 +36,7 @@ thiserror = "*"
 pem = "*"
 ecies = {version = "*", features = ["std"]}
 libsecp256k1 = "*"
-
+data-encoding = "*"
 
 [build-dependencies]
 tonic-build = "*"         # Generates Rust code from Protobuf
